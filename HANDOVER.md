@@ -289,6 +289,133 @@ A: Add another `server.tool("name", "description", { params }, handler)` in serv
 
 ---
 
+---
+
+## 🚨 CRITICAL ARCHITECTURE GAPS (Must Build)
+
+These were identified in the original reverse-engineering but **NOT YET IMPLEMENTED**:
+
+### Gap 1: Two-Way Interactivity (The "Input" Problem)
+
+**Current:** Claude → Browser (one-way only)
+**Required:** Browser → Claude (user clicks should trigger Claude)
+
+**Why it matters:** If user clicks a button in the generated UI, Claude has no idea. The calculator Claude builds has buttons that do nothing.
+
+**Design needed:**
+```javascript
+// Browser catches clicks on generated DOM
+document.querySelector('#app').addEventListener('click', (e) => {
+  ws.send(JSON.stringify({
+    type: "USER_INTERACTION",
+    elementId: e.target.id,
+    elementText: e.target.textContent
+  }));
+});
+```
+
+**Challenge:** Claude CLI is request/response - it doesn't "listen" for events. Need a loop wrapper or different architecture.
+
+---
+
+### Gap 2: State Verification (The "Blind" Problem)
+
+**Current:** `update_ui` returns "Success" without checking what actually rendered
+**Required:** Feedback loop so Claude can verify its work
+
+**Why it matters:** If Claude hallucinates a CSS class that doesn't exist, the UI breaks silently. Claude assumes it worked.
+
+**Design needed:**
+```javascript
+// update_ui should wait for ACK from browser
+server.tool("update_ui", ..., async ({ html, selector }) => {
+  broadcastToBrowser({ type: "UPDATE_DOM", html, selector, requestId: uuid() });
+  
+  // Wait for browser to confirm and return actual DOM state
+  const ack = await waitForAck(requestId, timeout=5000);
+  
+  return {
+    content: [{
+      type: "text",
+      text: `Updated. Actual innerHTML: ${ack.actualHtml}`
+    }]
+  };
+});
+```
+
+---
+
+### Gap 3: Session Isolation (Multi-Tab Problem)
+
+**Current:** One global `activeBrowserSocket` variable
+**Required:** Unique session IDs per browser tab
+
+**Why it matters:** Open two browser tabs → they fight over the same WebSocket. Messages go to random tab.
+
+**Design needed:**
+```javascript
+// Browser connects with session ID
+const ws = new WebSocket('ws://localhost:3000?sessionId=abc123');
+
+// Server tracks multiple connections
+const browserSockets = new Map(); // sessionId -> WebSocket
+```
+
+---
+
+### Gap 4: HTTP Timeout Handling
+
+**Current:** Default HTTP timeouts (could be 2 minutes)
+**Required:** Keep-alive for long Claude thinking times
+
+**Why it matters:** If Claude thinks for 30+ seconds on complex UI, HTTP connection might timeout.
+
+**Design needed:**
+```javascript
+// Send keep-alive or use proper timeout config
+app.post('/mcp', async (req, res) => {
+  res.setTimeout(120000); // 2 min timeout
+  // ... handle request
+});
+```
+
+---
+
+### Gap 5: Security (HTTP Port Exposure)
+
+**Current:** Port 3000 open on localhost, no auth
+**Required (for production):** Authentication
+
+**Why it matters:** stdio was local-only by design. HTTP opens a network port. Anyone on local network could connect.
+
+**Design needed:**
+- Auth headers on MCP endpoint
+- Token validation on WebSocket connect
+- HTTPS for production
+
+---
+
+## Architecture Decision Log
+
+### Why HTTP Transport Instead of Stdio?
+
+**Original Plan:** Use `StdioServerTransport` (Claude spawns server)
+
+**Problem Discovered:** 
+- Stdio means Claude **spawns a NEW server process** each invocation
+- WebSocket connects to a **separately running server**
+- Result: **TWO different servers** - messages never reach browser
+
+**Solution:** HTTP transport
+- Server runs **once, persistently**
+- Claude **connects** to existing server
+- Browser **connects** to same server
+- All messages flow through **single instance**
+
+**Trade-off:** Lost local-only security of stdio, gained working architecture.
+
+---
+
 ## Summary
 
 1. **Start server:** `npm run server:mcp`
@@ -296,7 +423,19 @@ A: Add another `server.tool("name", "description", { params }, handler)` in serv
 3. **Use Claude:** Ask it to use `update_ui` or `log_thought`
 4. **Watch the magic:** Browser updates in real-time
 
-The architecture is solid. HTTP transport works. Tools are registered. The main work remaining is E2E verification and UI polish.
+### What's Done ✅
+- HTTP transport works
+- Tools registered and callable
+- One-way message flow (Claude → Browser)
+
+### What's Missing 🚨
+- Two-way interaction (Browser → Claude)
+- Feedback loop (verify DOM actually updated)
+- Multi-session support
+- Timeout handling
+- Security/auth
+
+The **happy path works**. The **real-world robustness** needs building.
 
 Good luck! 🚀
 
