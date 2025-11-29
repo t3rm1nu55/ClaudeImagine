@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+.pnpm-debug.log
+npm-debug.log
+yarn-error.log
+
+# System
+.DS_Store
+.env
+
+# Test output and logs
+test-*.log
+*.log
+archive/test-logs/
+test-skills/
+
+# Claude Code
+# Ignore internal state/history but keep configuration templates
+.claude/history.jsonl
+.claude/session-env/
+.claude/statsig/
+.claude/checkpoints/
+.claude/projects/
+.claude/downloads/
+.claude/debug/
+# Keep .claude/agents, .claude/skills, .claude/commands, .claude/settings.json
+
+# Temporary isolated instances
+claude-isolated-*/
+claude-isolated-mcp-*/
+
+# Editor
+.vscode/
+.idea/

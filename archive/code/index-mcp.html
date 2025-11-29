@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Imagine</title>
+    <script src="https://unpkg.com/morphdom/dist/morphdom-umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #f0f0f0; font-family: sans-serif; display: flex; height: 100vh; }
+        #sidebar { width: 300px; padding: 20px; background: white; border-right: 1px solid #ddd; overflow-y: auto; }
+        #main { flex: 1; padding: 40px; display: flex; justify-content: center; align-items: start; }
+        #app { width: 100%; max-width: 800px; background: white; min-height: 500px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 8px; }
+        .log-entry { margin-bottom: 8px; font-size: 12px; color: #666; border-left: 2px solid #007aff; padding-left: 8px; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h2 class="font-bold mb-4">Agent Thoughts</h2>
+        <div id="logs"></div>
+    </div>
+
+    <div id="main">
+        <div id="app">
+            <div class="text-center text-gray-400 mt-20">
+                Waiting for Claude...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ws = new WebSocket(`ws://${window.location.host}`);
+        const app = document.getElementById('app');
+        const logs = document.getElementById('logs');
+
+        ws.onopen = () => addLog("Connected to Relay");
+        ws.onclose = () => addLog("Disconnected from Relay");
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'UPDATE_DOM') {
+                // The Magic: Morphdom patches the UI without losing state
+                const target = data.selector === '#app' ? app : document.querySelector(data.selector);
+                // Create a temporary container to parse the string
+                const temp = document.createElement('div');
+                temp.innerHTML = data.html;
+                
+                // If replacing the whole app, use the children
+                if(data.selector === '#app') {
+                     morphdom(target, temp, { childrenOnly: true });
+                } else {
+                     morphdom(target, temp.firstElementChild);
+                }
+                addLog("DOM Updated");
+            }
+            
+            if (data.type === 'LOG') {
+                addLog(data.message);
+            }
+        };
+
+        function addLog(msg) {
+            const div = document.createElement('div');
+            div.className = 'log-entry';
+            div.textContent = `> ${msg}`;
+            logs.prepend(div);
+        }
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "imagine": {
+      "command": "node",
+      "args": [
+        "/Users/markforster/ClaudeImagine/server-mcp.js"
+      ]
+    }
+  }
+}
