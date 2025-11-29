@@ -1,185 +1,129 @@
-# Claude Imagine - Claude CLI + MCP Architecture
+# Claude Imagine
 
-A reverse-engineered implementation using **Claude CLI** with **MCP (Model Context Protocol)** to enable Claude to build and manage browser UIs in real-time.
+A visual UI builder powered by Claude AI using the Model Context Protocol (MCP).
+
+Claude connects to an MCP server via HTTP transport, which relays UI commands to a browser via WebSocket. This enables Claude to build and update web interfaces in real-time.
 
 ## Architecture
 
 ```
-┌─────────────┐         MCP (stdio)         ┌──────────────┐
-│ Claude CLI  │◄───────────────────────────►│ MCP Server   │
-│  (Backend)  │                              │  (Relay)     │
-└─────────────┘                              └──────────────┘
-                                                      │
-                                                      │ WebSocket
-                                                      │ (localhost:3000)
-                                                      ▼
-                                              ┌──────────────┐
-                                              │   Browser    │
-                                              │  (Frontend)   │
-                                              └──────────────┘
+┌─────────────┐         ┌──────────────────┐         ┌─────────┐
+│ Claude CLI  │──HTTP──►│  server-mcp.js   │◄──WS───│ Browser │
+└─────────────┘         │  (MCP Server)    │         └─────────┘
+                        │                  │
+                        │  Tools:          │
+                        │  - update_ui     │
+                        │  - log_thought   │
+                        └──────────────────┘
 ```
-
-## Key Components
-
-### 1. Claude CLI Backend
-- Uses Claude CLI (not direct API)
-- Configured via `claude_config.json`
-- MCP servers configured per instance
-- Isolated conversation history
-
-### 2. MCP Server Relay (`server-mcp.js`)
-- Express HTTP server (port 3000)
-- WebSocket server for browser communication
-- MCP stdio transport for Claude CLI
-- Two tools: `update_ui` and `log_thought`
-
-### 3. Browser Frontend (`index.html`)
-- WebSocket client connection
-- DOM patching with morphdom
-- Sidebar for "Agent Thoughts" logs
-- Main container (#app) for UI updates
 
 ## Quick Start
 
 ### 1. Install Dependencies
-
 ```bash
 npm install
 ```
 
-### 2. Configure MCP Server
-
-Ensure `claude_config.json` has the correct path to `server-mcp.js`:
-
-```json
-{
-  "mcpServers": {
-    "imagine": {
-      "command": "node",
-      "args": ["/absolute/path/to/server-mcp.js"]
-    }
-  }
-}
-```
-
-### 3. Start the Server
-
+### 2. Start the MCP Server
 ```bash
-node server-mcp.js
+npm run server:mcp
 ```
+Server runs at `http://localhost:3000`
 
-Server will start at `http://localhost:3000`
+### 3. Add MCP Server to Claude (one-time)
+```bash
+claude mcp add --transport http imagine http://localhost:3000/mcp
+```
 
 ### 4. Open Browser
+Navigate to `http://localhost:3000` in your browser.
 
-Open `http://localhost:3000` in your browser.
-
-### 5. Run Claude CLI
-
+### 5. Use Claude
 ```bash
-claude --print \
-  --mcp-config ./claude_config.json \
-  --dangerously-skip-permissions \
-  "Use mcp__imagine__update_ui to create a header with text 'Hello World'"
+# Interactive mode
+claude
+
+# Or non-interactive
+claude --print --dangerously-skip-permissions \
+  "Use update_ui to create a hello world page"
 ```
 
 ## MCP Tools
 
-### `update_ui`
-Updates the HTML content of the browser UI.
+| Tool | Description |
+|------|-------------|
+| `update_ui` | Updates HTML content in the browser |
+| `log_thought` | Displays status/thinking messages |
 
-```javascript
-{
-  "html": "<div>Your HTML here</div>",
-  "selector": "#app"  // Optional, defaults to #app
-}
+## Project Structure
+
 ```
-
-### `log_thought`
-Logs a message to the browser sidebar.
-
-```javascript
-{
-  "message": "Your message here"
-}
-```
-
-## Backend Instances
-
-Create permanent backend instances for continuous operation:
-
-```bash
-npm run create:backend ~/my-backend-instance
-cd ~/my-backend-instance
-./start.sh
-```
-
-See `playbooks/` directory for more details.
-
-## Testing
-
-### Run All Prerequisites
-
-```bash
-export ANTHROPIC_API_KEY="your-token"
-npm run test:all-prerequisites
-```
-
-### Individual Tests
-
-```bash
-npm run test:browser-prerequisites  # Browser prerequisites
-npm run test:isolated-primitives    # Isolated instances
-npm run test:mcp-tools              # MCP tool configuration
-npm run test:backend-playbooks      # Backend instances
-npm run test:claude-tools           # Tool execution
-npm run test:browser-connection     # Browser connection
+ClaudeImagine/
+├── src/
+│   └── server-mcp.js      # MCP server (HTTP transport)
+├── public/
+│   └── index.html         # Browser UI
+├── scripts/
+│   └── create-isolated-claude.js
+├── tests/
+│   ├── prerequisites/     # Unit tests
+│   └── e2e/              # Integration tests
+├── docs/
+│   ├── CLAUDE-LEARNING.md # Key discoveries
+│   ├── ROADMAP.md        # Development plan
+│   └── ...
+├── claude_config.json     # MCP configuration
+└── package.json
 ```
 
 ## Configuration
 
-### MCP Configuration (`claude_config.json`)
-
+### claude_config.json
 ```json
 {
   "mcpServers": {
     "imagine": {
-      "command": "node",
-      "args": ["/absolute/path/to/server-mcp.js"]
+      "type": "http",
+      "url": "http://localhost:3000/mcp"
     }
   }
 }
 ```
 
-### Backend Instance Configuration
+### Environment Variables
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | 3000 | Server port |
+| `HOST` | 127.0.0.1 | Server host |
 
-Backend instances include:
-- `CLAUDE.md` - Instance documentation
-- `.claude/settings.json` - Claude Code settings
-- `claude_config.json` - MCP configuration
-- `start.sh` - Startup script
+## Development
+
+```bash
+# Start server
+npm run server:mcp
+
+# Run tests
+npm test
+
+# Check MCP connection
+claude mcp list
+```
 
 ## Documentation
 
-- `MCP-SETUP.md` - MCP server setup and architecture
-- `PLAYBOOKS-SUMMARY.md` - Backend instance playbooks
-- `CONVERSATION-MANAGEMENT.md` - Conversation ID and history management
-- `DESIGN-REVIEW.md` - Architecture review
-- `SECURITY.md` - Security and sandboxing
+- [CLAUDE-LEARNING.md](docs/CLAUDE-LEARNING.md) - Key technical discoveries
+- [ROADMAP.md](docs/ROADMAP.md) - Development roadmap
+- [LESSONS-LEARNED.md](docs/LESSONS-LEARNED.md) - Project insights
 
-## Key Differences from Original
+## Key Learnings
 
-This implementation uses:
-- ✅ **Claude CLI** (not direct API calls)
-- ✅ **MCP Protocol** (stdio transport)
-- ✅ **Backend instances** (permanent, configurable)
-- ✅ **Isolated conversation history**
+1. **HTTP Transport** - Claude connects to a running server (not spawned)
+2. **Tool Naming** - Tools become `mcp__imagine__<tool_name>`
+3. **Session Management** - Each Claude session creates an MCP session
+4. **WebSocket Bridge** - Single server handles both MCP and browser
 
-## Requirements
-
-- Node.js
-- Claude CLI installed and authenticated (Claude CLI handles its own authentication)
+See [docs/CLAUDE-LEARNING.md](docs/CLAUDE-LEARNING.md) for full details.
 
 ## License
 
-This is an educational reverse-engineering project. The original "Imagine with Claude" is a product of Anthropic.
+MIT

@@ -1,78 +1,88 @@
-# Claude Imagine - Architecture & Execution Roadmap
+# Claude Imagine - Roadmap
 
-## Architecture Overview
+## Current Status: HTTP Transport Implemented ✅
+
+The core architecture has been refactored to use HTTP transport instead of stdio. This allows:
+- Single server instance handles both Claude (HTTP) and Browser (WebSocket)
+- Server runs independently, Claude connects to it
+- No more conflicting server instances
+
+## Architecture
+
 ```
-┌─────────────┐         MCP (stdio)         ┌──────────────┐
-│ Claude CLI  │◄───────────────────────────►│ MCP Server   │
-│  (Backend)  │                              │  (Relay)     │
-└─────────────┘                              └──────────────┘
-                                                      │
-                                                      │ WebSocket
-                                                      │ (localhost:3000)
-                                                      ▼
-                                              ┌──────────────┐
-                                              │   Browser    │
-                                              │  (Frontend)   │
-                                              └──────────────┘
+┌─────────────┐         ┌──────────────────┐         ┌─────────┐
+│ Claude CLI  │──HTTP──►│  server-mcp.js   │◄──WS───│ Browser │
+│             │         │                  │         │         │
+│  POST /mcp  │         │  MCP Server:     │         │  UI     │
+│  (tools)    │         │  - update_ui     │         │  Canvas │
+│             │         │  - log_thought   │         │         │
+└─────────────┘         └──────────────────┘         └─────────┘
 ```
 
-## Execution Phases
+## Completed
 
-### Phase 1: Prerequisites Verification ✅
-**Goal:** Verify all foundational components work before integration.
-- [x] Verify Claude CLI installation & authentication (OAuth)
-- [x] Test Browser Prerequisites (Models, Tools, Agents)
-- [x] Test Isolated Primitives (CLI isolation, config copying)
-- [x] Test MCP Tool Configuration
-- [x] Test Backend Playbooks
-- [x] Test Conversation Management
+### Phase 1: Research & Foundation ✅
+- [x] Understand Claude CLI capabilities
+- [x] Research MCP protocol (stdio vs HTTP transport)
+- [x] Set up project structure
+- [x] Create basic MCP server
 
-**Status:** All prerequisite tests passing.
+### Phase 2: HTTP Transport ✅
+- [x] Refactor server to use StreamableHTTPServerTransport
+- [x] Implement session management
+- [x] Configure Claude CLI for HTTP transport
+- [x] Verify tool discovery works
 
-### Phase 2: Browser Connection ⚠️
-**Goal:** Verify browser can connect and receive messages.
-1. **Run Browser Connection Test** (`npm run test:browser-connection`)
-   - Starts MCP server
-   - Connects WebSocket
-   - Runs tool calls via Claude CLI
-   - Verifies message reception
+### Phase 3: Documentation ✅
+- [x] Document key learnings (CLAUDE-LEARNING.md)
+- [x] Update README
+- [x] Clean up stale files
+- [x] Organize archive
 
-**Success Criteria:**
-- Server starts on port 3000
-- WebSocket connects
-- Messages received correctly
-- Tool execution works
+## Next Steps
 
-### Phase 3: Visual Verification ⚠️
-**Goal:** Verify UI updates appear in actual browser.
-1. Start Server: `node server-mcp.js`
-2. Open `http://localhost:3000`
-3. Run manual Claude CLI command to `log_thought` and `update_ui`
-4. Visually confirm sidebar logs and DOM updates (morphdom)
+### Phase 4: Integration Testing
+- [ ] Full E2E test with browser
+- [ ] Verify WebSocket message flow
+- [ ] Test UI updates in real browser
 
-### Phase 4: Full Integration ⚠️
-**Goal:** Test complete end-to-end flow with a persistent backend instance.
-1. Create backend instance: `npm run create:backend ~/test-backend`
-2. Start backend: `cd ~/test-backend && ./start.sh`
-3. Open Browser: `http://localhost:3000`
-4. Run complex UI generation prompt via CLI
-5. Verify end-to-end functionality
+### Phase 5: UI Enhancement
+- [ ] Improve browser UI design
+- [ ] Add visual feedback for tool calls
+- [ ] Implement error handling display
 
-## File Structure & Components
+### Phase 6: Production Ready
+- [ ] Add authentication for browser
+- [ ] Support multiple browser connections
+- [ ] Add HTTPS support
+- [ ] Rate limiting
 
-### Core Components
-- `server-mcp.js`: Express + WebSocket + MCP Relay
-- `index.html`: Frontend with morphdom & Tailwind
-- `claude_config.json`: MCP Configuration for CLI
-- `.claude/`: Standard project configuration (Agents, Skills)
+## Quick Commands
 
-### Documentation
-- `docs/architecture/`: Architecture decisions, security, and MCP setup
-- `docs/guides/`: User guides, quick start, and isolated instances
-- `docs/archive/`: Historical implementation logs and superseded plans
+```bash
+# Start server
+npm run server:mcp
 
-## Testing Strategy
-- **Unit/Prerequisite Tests:** `npm run test:all-prerequisites`
-- **Browser Connection:** `npm run test:browser-connection`
-- **End-to-End:** Manual verification + `test-backend-e2e.js`
+# Check status
+claude mcp list
+curl http://localhost:3000/health
 
+# Test tool
+claude --print --dangerously-skip-permissions \
+  "Call log_thought with message 'test'"
+```
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/server-mcp.js` | MCP server (HTTP transport) |
+| `public/index.html` | Browser UI |
+| `claude_config.json` | MCP configuration |
+| `scripts/create-isolated-claude.js` | Test helper |
+
+## References
+
+- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
+- [Claude CLI Documentation](https://docs.anthropic.com/en/docs/claude-code)
+- [docs/CLAUDE-LEARNING.md](CLAUDE-LEARNING.md) - Key discoveries

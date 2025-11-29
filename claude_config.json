@@ -1,10 +1,8 @@
 {
   "mcpServers": {
     "imagine": {
-      "command": "node",
-      "args": [
-        "/Users/markforster/ClaudeImagine/server-mcp.js"
-      ]
+      "type": "http",
+      "url": "http://localhost:3000/mcp"
     }
   }
 }
