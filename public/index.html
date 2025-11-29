@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,13 +8,49 @@
     <script src="https://unpkg.com/morphdom/dist/morphdom-umd.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background: #f0f0f0; font-family: sans-serif; display: flex; height: 100vh; }
-        #sidebar { width: 300px; padding: 20px; background: white; border-right: 1px solid #ddd; overflow-y: auto; }
-        #main { flex: 1; padding: 40px; display: flex; justify-content: center; align-items: start; }
-        #app { width: 100%; max-width: 800px; background: white; min-height: 500px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 8px; }
-        .log-entry { margin-bottom: 8px; font-size: 12px; color: #666; border-left: 2px solid #007aff; padding-left: 8px; }
+        body {
+            background: #f0f0f0;
+            font-family: sans-serif;
+            display: flex;
+            height: 100vh;
+        }
+
+        #sidebar {
+            width: 300px;
+            padding: 20px;
+            background: white;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+        }
+
+        #main {
+            flex: 1;
+            padding: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: start;
+        }
+
+        #app {
+            width: 100%;
+            max-width: 800px;
+            background: white;
+            min-height: 500px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: #666;
+            border-left: 2px solid #007aff;
+            padding-left: 8px;
+        }
     </style>
 </head>
+
 <body>
 
     <div id="sidebar">
@@ -30,7 +67,16 @@
     </div>
 
     <script>
-        const ws = new WebSocket(`ws://${window.location.host}`);
+        // Generate or get Session ID
+        let sessionId = new URLSearchParams(window.location.search).get('sessionId');
+        if (!sessionId) {
+            sessionId = crypto.randomUUID();
+            const url = new URL(window.location);
+            url.searchParams.set('sessionId', sessionId);
+            window.history.replaceState({}, '', url);
+        }
+
+        const ws = new WebSocket(`ws://${window.location.host}?sessionId=${sessionId}`);
         const app = document.getElementById('app');
         const logs = document.getElementById('logs');
 
@@ -39,27 +85,58 @@
 
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            
+
             if (data.type === 'UPDATE_DOM') {
                 // The Magic: Morphdom patches the UI without losing state
                 const target = data.selector === '#app' ? app : document.querySelector(data.selector);
                 // Create a temporary container to parse the string
                 const temp = document.createElement('div');
                 temp.innerHTML = data.html;
-                
+
                 // If replacing the whole app, use the children
-                if(data.selector === '#app') {
-                     morphdom(target, temp, { childrenOnly: true });
+                if (data.selector === '#app') {
+                    morphdom(target, temp, { childrenOnly: true });
                 } else {
-                     morphdom(target, temp.firstElementChild);
+                    morphdom(target, temp.firstElementChild);
                 }
                 addLog("DOM Updated");
+
+                // Send Acknowledgement
+                if (data.requestId) {
+                    ws.send(JSON.stringify({
+                        type: 'DOM_UPDATED',
+                        requestId: data.requestId,
+                        htmlLength: app.innerHTML.length,
+                        timestamp: Date.now()
+                    }));
+                }
             }
-            
+
             if (data.type === 'LOG') {
                 addLog(data.message);
             }
+
+            if (data.type === 'SESSION_INIT') {
+                addLog(`Session ID: ${data.sessionId}`);
+            }
         };
+
+        // Capture clicks
+        app.addEventListener('click', (e) => {
+            // Don't capture clicks on the waiting message
+            if (e.target.innerText === 'Waiting for Claude...') return;
+
+            const interaction = {
+                type: 'USER_INTERACTION',
+                eventType: 'click',
+                targetId: e.target.id,
+                targetTag: e.target.tagName,
+                targetText: e.target.innerText,
+                timestamp: Date.now()
+            };
+            ws.send(JSON.stringify(interaction));
+            addLog(`Sent click on <${e.target.tagName}>`);
+        });
 
         function addLog(msg) {
             const div = document.createElement('div');
@@ -69,5 +146,5 @@
         }
     </script>
 </body>
-</html>
 
+</html>

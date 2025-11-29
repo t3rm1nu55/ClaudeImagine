@@ -33,14 +33,14 @@ const DEFAULT_MCP_URL = 'http://localhost:3000/mcp';
 async function copyOAuthCredentials(isolatedConfigDir) {
   const homeClaudeDir = join(homedir(), '.claude');
   const oauthFiles = ['token.json', 'credentials.json', 'auth.json'];
-  
+
   try {
     await access(homeClaudeDir, constants.F_OK);
-    
+
     for (const file of oauthFiles) {
       const sourceFile = join(homeClaudeDir, file);
       const destFile = join(isolatedConfigDir, file);
-      
+
       try {
         await access(sourceFile, constants.F_OK);
         await copyFile(sourceFile, destFile);
@@ -76,7 +76,9 @@ export async function createIsolatedClaude(prompt, options = {}) {
     agents = null,
     tools = null,
     allowedTools = null,
-    disallowedTools = null
+    disallowedTools = null,
+    mcpApiKey = null,
+    interactive = false
   } = options;
 
   const useGlobalAuth = !authToken;
@@ -103,7 +105,8 @@ export async function createIsolatedClaude(prompt, options = {}) {
     mcpServers: {
       imagine: {
         type: "http",
-        url: mcpUrl
+        url: mcpUrl,
+        headers: mcpApiKey ? { Authorization: `Bearer ${mcpApiKey}` } : undefined
       }
     }
   };
@@ -148,23 +151,25 @@ export async function createIsolatedClaude(prompt, options = {}) {
   return new Promise((resolve, reject) => {
     const claude = spawn('claude', args, {
       cwd: isolatedConfigDir,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: interactive ? 'inherit' : ['pipe', 'pipe', 'pipe'],
       env
     });
 
     let stdout = '';
     let stderr = '';
 
-    claude.stdin.write(prompt);
-    claude.stdin.end();
+    if (!interactive) {
+      claude.stdin.write(prompt);
+      claude.stdin.end();
 
-    claude.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
+      claude.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
 
-    claude.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
+      claude.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+    }
 
     claude.on('close', async (code) => {
       if (cleanup && isolatedConfigDir) {
@@ -181,7 +186,7 @@ export async function createIsolatedClaude(prompt, options = {}) {
       if (cleanup && isolatedConfigDir) {
         try {
           await rm(isolatedConfigDir, { recursive: true, force: true });
-        } catch (e) {}
+        } catch (e) { }
       }
       reject(error);
     });
@@ -191,10 +196,10 @@ export async function createIsolatedClaude(prompt, options = {}) {
       if (cleanup && isolatedConfigDir) {
         try {
           await rm(isolatedConfigDir, { recursive: true, force: true });
-        } catch (e) {}
+        } catch (e) { }
       }
       reject(new Error('Claude CLI timeout'));
-    }, 60000);
+    }, 300000); // 5 minutes
   });
 }
 
@@ -210,7 +215,9 @@ export async function createIsolatedClaudeWithMCP(prompt, options = {}) {
     agents = null,
     tools = null,
     allowedTools = null,
-    disallowedTools = null
+    disallowedTools = null,
+    mcpApiKey = null,
+    interactive = false
   } = options;
 
   return createIsolatedClaude(prompt, {
@@ -220,14 +227,16 @@ export async function createIsolatedClaudeWithMCP(prompt, options = {}) {
     agents,
     tools,
     allowedTools,
-    disallowedTools
+    disallowedTools,
+    mcpApiKey,
+    interactive
   });
 }
 
 // CLI usage
 if (import.meta.url === `file://${process.argv[1]}`) {
   const prompt = process.argv[2] || 'Hello, this is an isolated Claude instance.';
-  
+
   createIsolatedClaude(prompt)
     .then(result => {
       console.log('=== Isolated Claude Response ===');
